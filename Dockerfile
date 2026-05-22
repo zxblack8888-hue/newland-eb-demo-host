@@ -5,7 +5,6 @@ COPY package.json ./
 COPY src ./src
 
 ENV NODE_ENV=production
-ENV HTTP_PORT=8080
 ENV VT_PORT=2323
 
 EXPOSE 8080
