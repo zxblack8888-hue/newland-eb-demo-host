@@ -1,0 +1,24 @@
+[Unit]
+Description=Newland EB Demo Host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=newland-eb
+Group=newland-eb
+WorkingDirectory=/opt/newland-eb-demo-host
+Environment=NODE_ENV=production
+Environment=HTTP_PORT=8080
+Environment=VT_PORT=2323
+Environment=HOST=0.0.0.0
+ExecStart=/usr/bin/node /opt/newland-eb-demo-host/src/server.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

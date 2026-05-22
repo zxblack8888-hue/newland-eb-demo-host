@@ -33,25 +33,30 @@ HTTP_PORT=8080 VT_PORT=2323 npm start
 Web profile:
 
 - Type: `WEB HTTPS/HTTP`
-- URL: `https://<your-domain>`
+- URL: `http://<public-ip>:8080` or `https://<your-domain>`
 
 VT profile:
 
 - Type: `VT100 Telnet`
-- Host: Railway TCP proxy host or local host
-- Port: Railway TCP proxy port or `2323`
+- Host: public IP or domain
+- Port: `2323`
 
-## Railway
+## Oracle Cloud VM
 
-Railway can expose the HTTP app with Public Networking and the VT service with TCP Proxy.
+Oracle Cloud Always Free is the preferred deployment target for the full demo because it can expose both HTTP and raw TCP for VT/Telnet testing.
 
-Suggested deployment:
+See [deploy/oracle-vm.md](deploy/oracle-vm.md).
 
-1. Push this directory to GitHub as its own repository.
-2. Create a Railway project from the GitHub repo.
-3. Expose HTTP port `8080` with Public Networking.
-4. Add a TCP Proxy for internal port `2323`.
-5. Configure Newland EB host profiles with the generated domains/ports.
+Quick install on an Ubuntu VM:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zxblack8888-hue/newland-eb-demo-host/main/deploy/install-oracle-ubuntu.sh | sudo bash
+```
+
+Open these ports in both Oracle Cloud networking and the VM firewall:
+
+- TCP `8080` for the web demo
+- TCP `2323` for the VT terminal demo
 
 ## Demo Credentials
 
