@@ -1,0 +1,262 @@
+import http from "node:http";
+import net from "node:net";
+import { URL } from "node:url";
+
+const HTTP_PORT = Number(process.env.HTTP_PORT || process.env.PORT || 8080);
+const VT_PORT = Number(process.env.VT_PORT || 2323);
+const HOST = process.env.HOST || "0.0.0.0";
+
+export function createHttpServer() {
+  return http.createServer((req, res) => {
+    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    if (url.pathname === "/health") return sendJson(res, 200, { ok: true, service: "newland-eb-demo-host" });
+    if (url.pathname === "/config-samples") return sendJson(res, 200, configSamples(req.headers.host || "localhost"));
+    if (url.pathname === "/assets/app.js") return sendText(res, 200, "application/javascript; charset=utf-8", clientJs());
+    if (url.pathname === "/assets/style.css") return sendText(res, 200, "text/css; charset=utf-8", css());
+    return sendText(res, 200, "text/html; charset=utf-8", html());
+  });
+}
+
+export function createVtServer() {
+  return net.createServer((socket) => {
+    socket.setEncoding("utf8");
+    socket.setNoDelay(true);
+    const session = new VtSession(socket);
+    session.start();
+  });
+}
+
+function sendJson(res, status, body) {
+  sendText(res, status, "application/json; charset=utf-8", JSON.stringify(body, null, 2));
+}
+
+function sendText(res, status, type, body) {
+  res.writeHead(status, {
+    "content-type": type,
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff"
+  });
+  res.end(body);
+}
+
+function configSamples(hostHeader) {
+  const host = hostHeader.split(":")[0];
+  return {
+    webProfile: { name: "Newland EB Web Demo", url: `https://${host}` },
+    vtProfile: {
+      name: "Newland EB VT Demo",
+      protocol: "VT100",
+      transport: "PLAIN_TCP",
+      host,
+      port: VT_PORT,
+      rows: 24,
+      cols: 80,
+      autoScanEnter: true
+    }
+  };
+}
+
+function html() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Newland EB Demo Host</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">Newland EB Demo Host</div>
+    <div class="status">HTTP Web Workflow</div>
+  </header>
+  <main id="app" class="screen"></main>
+  <nav>
+    <button data-action="login">Login</button>
+    <button data-action="outbound">Outbound</button>
+    <button data-action="inbound">Inbound</button>
+    <button data-action="inventory">Inventory</button>
+    <button data-action="zoom">Small Screen</button>
+  </nav>
+  <script src="/assets/app.js"></script>
+</body>
+</html>`;
+}
+
+function css() {
+  return `:root{font-family:Arial,Helvetica,sans-serif;color:#edf3f8;background:#101418}body{margin:0;background:#101418}header{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:16px 18px;background:#17202b;border-bottom:1px solid #273244}.brand{font-size:22px;font-weight:700}.status{color:#7dd3fc;font-size:14px}.screen{padding:18px;max-width:760px;margin:0 auto 76px}.panel{border:1px solid #2c3848;border-radius:8px;background:#151b24;padding:16px;margin-bottom:14px}.title{font-size:24px;font-weight:800;color:#facc15;margin:0 0 14px}.row{margin:14px 0}label{display:block;color:#facc15;font-size:13px;font-weight:700;text-transform:uppercase;margin-bottom:7px}input,select{box-sizing:border-box;width:100%;font-size:22px;padding:14px 16px;border:2px solid #334155;border-radius:8px;background:#0f141c;color:#f8fafc}input:focus{outline:none;border-color:#facc15}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}button{font-size:18px;font-weight:700;padding:12px 14px;border:0;border-radius:8px;background:#2563eb;color:white}button.secondary{background:#334155}.ok{color:#4ade80}.warn{color:#facc15}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.tiny{font-size:12px;line-height:1.25}.zoomed{font-size:22px}nav{position:fixed;left:0;right:0;bottom:0;display:flex;gap:1px;background:#0b1017;border-top:1px solid #273244}nav button{flex:1;border-radius:0;font-size:13px;padding:12px 4px;background:#17202b}`;
+}
+
+function clientJs() {
+  return `const app=document.getElementById('app');let state={user:'',task:'',loc:'',item:'',pallet:''};function q(s){return document.querySelector(s)}function focusFirst(){setTimeout(()=>{const el=document.querySelector('input:not([readonly])');if(el)el.focus()},50)}function field(id,label,type='text',scan=false){return '<div class="row"><label for="'+id+'">'+label+'</label><input id="'+id+'" '+(scan?'data-scan="true" inputmode="none"':'')+' type="'+type+'" autocomplete="off"></div>'}function page(title,body){app.innerHTML='<section class="panel"><h1 class="title">'+title+'</h1>'+body+'</section>';bindEnter();focusFirst()}function bindEnter(){app.querySelectorAll('input').forEach((el,i,all)=>{el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const next=all[i+1];if(next){next.focus();return}submitCurrent()}})})}function submitCurrent(){const fn=app.dataset.submit;if(fn&&window[fn])window[fn]()}window.login=()=>page('Login',field('user','User')+field('pass','Password','password')+'<div class="actions"><button onclick="submitCurrent()">Sign in</button></div>');window.submitLogin=()=>{state.user=q('#user')?.value||'operator';outbound()};window.outbound=()=>page('Outbound Picking',field('task','Scan Task #','text',true)+'<div class="actions"><button onclick="submitCurrent()">Continue</button></div>');window.submitOutbound=()=>{state.task=q('#task')?.value||'TASK-1001';page('Pick Task '+state.task,field('loc','Scan Location','text',true)+field('item','Scan Item','text',true)+field('qty','Qty Picked','number')+'<div class="actions"><button onclick="submitCurrent()">Confirm</button></div>')};window.submitPick=()=>page('Pick Confirmed','<p class="ok">Task '+state.task+' confirmed.</p><p>Returning to menu style workflows should not require extra navigation after scan confirmation.</p><div class="actions"><button onclick="outbound()">Next Pick</button><button class="secondary" onclick="inventory()">Inventory</button></div>');window.inbound=()=>page('Inbound Putaway',field('pallet','Scan Pallet','text',true)+field('dest','Scan Destination','text',true)+'<div class="actions"><button onclick="submitCurrent()">Confirm</button></div>');window.submitInbound=()=>page('Putaway Complete','<p class="ok">Pallet putaway confirmed.</p><div class="actions"><button onclick="inbound()">Next Pallet</button></div>');window.inventory=()=>page('Inventory Lookup',field('sku','Scan Item / SKU','text',true)+'<div class="actions"><button onclick="submitCurrent()">Lookup</button></div>');window.submitInventory=()=>page('Inventory Result','<p class="mono">Item: '+(q('#sku')?.value||'ITEM-001')+'</p><p>On hand: <b>127</b></p><p>Locations: A-12-03-B, A-15-07-C</p><div class="actions"><button onclick="inventory()">Lookup Another</button></div>');window.zoom=()=>page('Small Server Screen','<div class="tiny"><p>This page intentionally uses small dense text to validate Newland EB zoom and handheld readability behavior.</p><p class="mono">PO 4500098821 | SKU WIDGET-001 | BIN A-12-03-B | QTY 000127 | STATUS READY</p><p class="mono">Use browser zoom or Newland EB controls to enlarge legacy desktop-style screens.</p></div><div class="actions"><button onclick="app.classList.toggle(\\'zoomed\\')">Toggle Page Zoom</button></div>');function submitCurrent(){const title=app.querySelector('.title')?.textContent||'';if(title==='Login')submitLogin();else if(title==='Outbound Picking')submitOutbound();else if(title.startsWith('Pick Task'))submitPick();else if(title==='Inbound Putaway')submitInbound();else if(title==='Inventory Lookup')submitInventory()}document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>window[b.dataset.action]());login();`;
+}
+
+class VtSession {
+  constructor(socket) {
+    this.socket = socket;
+    this.buffer = "";
+    this.lines = [];
+  }
+
+  start() {
+    this.socket.on("data", (chunk) => this.onData(chunk));
+    this.socket.on("error", () => {});
+    this.login();
+  }
+
+  onData(chunk) {
+    const clean = stripTelnet(chunk.toString("binary"));
+    for (const ch of clean) {
+      if (ch === "\r" || ch === "\n") {
+        const line = this.buffer;
+        this.buffer = "";
+        const resolve = this.pending;
+        this.pending = null;
+        if (resolve) resolve(line.trim());
+        else this.lines.push(line.trim());
+      } else if (ch === "\b" || ch.charCodeAt(0) === 127) {
+        this.buffer = this.buffer.slice(0, -1);
+      } else if (ch >= " ") {
+        this.buffer += ch;
+        this.write(ch);
+      }
+    }
+  }
+
+  prompt() {
+    return new Promise((resolve) => {
+      const next = this.lines.shift();
+      if (next != null) {
+        resolve(next);
+        return;
+      }
+      this.pending = resolve;
+    });
+  }
+
+  write(s) {
+    this.socket.write(s, "binary");
+  }
+
+  clear(title) {
+    this.write("\x1b[2J\x1b[H");
+    this.write("\x1b[33;1m" + center(title, 80) + "\x1b[0m\r\n\r\n");
+  }
+
+  async login() {
+    this.clear("NEWLAND EB VT DEMO");
+    this.write("    User:     \x1b[7m                    \x1b[0m\r\n\r\n");
+    this.write("    Password: \x1b[7m                    \x1b[0m\r\n\r\n");
+    this.write("    Any non-empty user/password is accepted for demo.\r\n");
+    this.write("\x1b[5;15H");
+    const user = await this.prompt();
+    this.write("\x1b[7;15H");
+    await this.prompt();
+    this.write(`\x1b[10;5H\x1b[32mWelcome ${user || "operator"}\x1b[0m`);
+    setTimeout(() => this.menu(), 500);
+  }
+
+  async menu() {
+    this.clear("NEWLAND EB TERMINAL TEST");
+    this.write("    1. Outbound Picking\r\n");
+    this.write("    2. Inbound Putaway\r\n");
+    this.write("    3. Inventory Lookup\r\n");
+    this.write("    4. Small Legacy Screen\r\n");
+    this.write("    9. Logout\r\n\r\n");
+    this.write("    Choice: ");
+    const choice = await this.prompt();
+    if (choice === "1") return this.outbound();
+    if (choice === "2") return this.inbound();
+    if (choice === "3") return this.inventory();
+    if (choice === "4") return this.smallScreen();
+    if (choice === "9") return this.login();
+    this.write("\r\nInvalid choice.");
+    setTimeout(() => this.menu(), 700);
+  }
+
+  async outbound() {
+    this.clear("OUTBOUND PICKING");
+    this.write("    Scan Task #: \x1b[7m                    \x1b[0m");
+    this.write("\x1b[5;18H");
+    const task = await this.prompt();
+    this.clear(`PICK TASK ${task || "TASK-1001"}`);
+    this.write("    Location: A-12-03-B\r\n");
+    this.write("    Item:     WIDGET-001\r\n");
+    this.write("    Required: 5\r\n\r\n");
+    this.write("    Scan Location: \x1b[7m                    \x1b[0m");
+    this.write("\x1b[8;20H");
+    const loc = await this.prompt();
+    if (loc && loc !== "A-12-03-B") {
+      this.write(`\x1b[11;5H\x1b[31mWrong location: ${loc}. Expected A-12-03-B\x1b[0m`);
+      setTimeout(() => this.outbound(), 1200);
+      return;
+    }
+    this.write("\x1b[10;5HQty Picked: \x1b[7m    \x1b[0m\x1b[10;17H");
+    await this.prompt();
+    this.write("\x1b[13;5H\x1b[32mPick confirmed. Returning to menu...\x1b[0m");
+    setTimeout(() => this.menu(), 900);
+  }
+
+  async inbound() {
+    this.clear("INBOUND PUTAWAY");
+    this.write("    Scan Pallet: \x1b[7m                    \x1b[0m\x1b[5;19H");
+    const pallet = await this.prompt();
+    this.clear(`PUTAWAY ${pallet || "PALLET-001"}`);
+    this.write("    Suggested Location: C-08-02-A\r\n\r\n");
+    this.write("    Scan Destination: \x1b[7m                    \x1b[0m\x1b[7;23H");
+    await this.prompt();
+    this.write("\x1b[10;5H\x1b[32mPutaway confirmed. Returning to menu...\x1b[0m");
+    setTimeout(() => this.menu(), 900);
+  }
+
+  async inventory() {
+    this.clear("INVENTORY LOOKUP");
+    this.write("    Scan Item / SKU: \x1b[7m                    \x1b[0m\x1b[5;23H");
+    const sku = await this.prompt();
+    this.clear(`ITEM ${sku || "WIDGET-001"}`);
+    this.write("    Description: Demo Widget\r\n");
+    this.write("    On-Hand:     127\r\n");
+    this.write("    Available:   115\r\n");
+    this.write("    Locations:   A-12-03-B, A-15-07-C\r\n\r\n");
+    this.write("    Press Enter to return to menu.");
+    await this.prompt();
+    this.menu();
+  }
+
+  async smallScreen() {
+    this.clear("DENSE LEGACY SCREEN");
+    for (let i = 0; i < 12; i++) {
+      this.write(`PO45000988${i} SKU-WIDGET-${String(i).padStart(3, "0")} BIN A-${10 + i}-03-B QTY ${String(5 + i).padStart(4, "0")} STATUS READY\r\n`);
+    }
+    this.write("\r\n    Press Enter to return to menu.");
+    await this.prompt();
+    this.menu();
+  }
+}
+
+function stripTelnet(input) {
+  let out = "";
+  for (let i = 0; i < input.length; i++) {
+    const code = input.charCodeAt(i);
+    if (code === 255) {
+      i += 2;
+      continue;
+    }
+    out += input[i];
+  }
+  return out;
+}
+
+function center(text, width) {
+  const pad = Math.max(0, Math.floor((width - text.length) / 2));
+  return " ".repeat(pad) + text;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  createHttpServer().listen(HTTP_PORT, HOST, () => {
+    console.log(`HTTP demo listening on ${HOST}:${HTTP_PORT}`);
+  });
+  createVtServer().listen(VT_PORT, HOST, () => {
+    console.log(`VT demo listening on ${HOST}:${VT_PORT}`);
+  });
+}

@@ -1,0 +1,14 @@
+{
+  "name": "newland-eb-demo-host",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Customer-facing demo host for Newland EB web and VT terminal validation.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
