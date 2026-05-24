@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import net from "node:net";
 import test from "node:test";
-import { createHttpServer, createVtServer } from "./server.js";
+import { createHttpServer, createTn3270Server, createTn5250Server, createVtServer } from "./server.js";
 
 test("http health endpoint returns ok", async () => {
   const server = createHttpServer();
@@ -11,6 +11,19 @@ test("http health endpoint returns ok", async () => {
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.ok, true);
+  await close(server);
+});
+
+test("host profile endpoint returns web and terminal profiles", async () => {
+  const server = createHttpServer();
+  await listen(server, 0);
+  const { port } = server.address();
+  const res = await fetch(`http://127.0.0.1:${port}/host-profiles.json`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.webProfiles[0].name, "Newland EB Web Demo");
+  assert.equal(body.teProfiles.map((p) => p.protocol).join(","), "VT100,TN5250,TN3270");
+  assert.equal(body.teProfiles.find((p) => p.protocol === "TN5250").deviceType, "IBM-3477-FC");
   await close(server);
 });
 
@@ -32,6 +45,52 @@ test("vt login reaches main menu", async () => {
     client.write("demo\r");
     client.write("demo\r");
     await waitFor(() => data.includes("Outbound Picking"));
+  } finally {
+    client?.destroy();
+    await close(server);
+  }
+});
+
+test("tn5250 demo emits write-to-display records and advances", async () => {
+  const server = createTn5250Server();
+  await listen(server, 0);
+  let client;
+  try {
+    const { port } = server.address();
+    client = net.createConnection({ host: "127.0.0.1", port });
+
+    let data = Buffer.alloc(0);
+    client.on("data", (chunk) => {
+      data = Buffer.concat([data, Buffer.from(chunk)]);
+    });
+
+    await waitFor(() => data.includes(Buffer.from([0x04, 0xF1])));
+    assert.ok(data.includes(Buffer.from([0x1D, 0x00, 0x00, 0x20])));
+    client.write(Buffer.from([0x7D]));
+    await waitFor(() => data.includes(Buffer.from([0xC1, 0xE2, 0x61, 0xF4, 0xF0, 0xF0])));
+  } finally {
+    client?.destroy();
+    await close(server);
+  }
+});
+
+test("tn3270 demo emits erase-write records and advances", async () => {
+  const server = createTn3270Server();
+  await listen(server, 0);
+  let client;
+  try {
+    const { port } = server.address();
+    client = net.createConnection({ host: "127.0.0.1", port });
+
+    let data = Buffer.alloc(0);
+    client.on("data", (chunk) => {
+      data = Buffer.concat([data, Buffer.from(chunk)]);
+    });
+
+    await waitFor(() => data.includes(Buffer.from([0xF5, 0x04])));
+    assert.ok(data.includes(Buffer.from([0x1D, 0x40])));
+    client.write(Buffer.from([0x7D]));
+    await waitFor(() => data.includes(Buffer.from([0xD4, 0xC1, 0xC9, 0xD5, 0xC6, 0xD9, 0xC1, 0xD4, 0xC5])));
   } finally {
     client?.destroy();
     await close(server);

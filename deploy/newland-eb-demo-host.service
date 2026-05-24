@@ -11,6 +11,8 @@ WorkingDirectory=/opt/newland-eb-demo-host
 Environment=NODE_ENV=production
 Environment=HTTP_PORT=8080
 Environment=VT_PORT=2323
+Environment=TN5250_PORT=25250
+Environment=TN3270_PORT=23270
 Environment=HOST=0.0.0.0
 ExecStart=/usr/bin/node /opt/newland-eb-demo-host/src/server.js
 Restart=always

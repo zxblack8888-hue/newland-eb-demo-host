@@ -4,6 +4,8 @@ import { URL } from "node:url";
 
 const HTTP_PORT = Number(process.env.HTTP_PORT || process.env.PORT || 8080);
 const VT_PORT = Number(process.env.VT_PORT || 2323);
+const TN5250_PORT = Number(process.env.TN5250_PORT || 25250);
+const TN3270_PORT = Number(process.env.TN3270_PORT || 23270);
 const HOST = process.env.HOST || "0.0.0.0";
 
 export function createHttpServer() {
@@ -11,6 +13,7 @@ export function createHttpServer() {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
     if (url.pathname === "/health") return sendJson(res, 200, { ok: true, service: "newland-eb-demo-host" });
     if (url.pathname === "/config-samples") return sendJson(res, 200, configSamples(req.headers.host || "localhost"));
+    if (url.pathname === "/host-profiles.json") return sendJson(res, 200, hostProfiles(req.headers.host || "localhost"));
     if (url.pathname === "/assets/app.js") return sendText(res, 200, "application/javascript; charset=utf-8", clientJs());
     if (url.pathname === "/assets/style.css") return sendText(res, 200, "text/css; charset=utf-8", css());
     return sendText(res, 200, "text/html; charset=utf-8", html());
@@ -22,6 +25,22 @@ export function createVtServer() {
     socket.setEncoding("utf8");
     socket.setNoDelay(true);
     const session = new VtSession(socket);
+    session.start();
+  });
+}
+
+export function createTn5250Server() {
+  return net.createServer((socket) => {
+    socket.setNoDelay(true);
+    const session = new Tn5250DemoSession(socket);
+    session.start();
+  });
+}
+
+export function createTn3270Server() {
+  return net.createServer((socket) => {
+    socket.setNoDelay(true);
+    const session = new Tn3270DemoSession(socket);
     session.start();
   });
 }
@@ -41,9 +60,89 @@ function sendText(res, status, type, body) {
 
 function configSamples(hostHeader) {
   const host = hostHeader.split(":")[0];
+  return hostProfiles(hostHeader);
+}
+
+function hostProfiles(hostHeader) {
+  const host = hostHeader.split(":")[0];
+  const webUrl = host.includes("localhost") || /^\d+\.\d+\.\d+\.\d+$/.test(host)
+    ? `http://${host}:${HTTP_PORT}`
+    : `https://${host}`;
   return {
-    webProfile: { name: "Newland EB Web Demo", url: `https://${host}` },
-    vtProfile: {
+    webProfiles: [
+      {
+        name: "Newland EB Web Demo",
+        url: webUrl,
+        keyboardMode: "NEWLAND"
+      }
+    ],
+    teProfiles: [
+      {
+        name: "Newland EB VT100/VT220 Demo",
+        protocol: "VT100",
+        transport: "PLAIN_TCP",
+        host,
+        port: VT_PORT,
+        rows: 24,
+        cols: 80,
+        autoScanEnter: true
+      },
+      {
+        name: "Newland EB TN5250 Demo",
+        protocol: "TN5250",
+        transport: "PLAIN_TCP",
+        host,
+        port: TN5250_PORT,
+        codepage: "CP037",
+        rows: 24,
+        cols: 80,
+        deviceType: "IBM-3477-FC",
+        autoScanEnter: false,
+        forceUpperCase: true,
+        fieldExitOnFull: true
+      },
+      {
+        name: "Newland EB TN3270 Demo",
+        protocol: "TN3270",
+        transport: "PLAIN_TCP",
+        host,
+        port: TN3270_PORT,
+        codepage: "CP037",
+        rows: 24,
+        cols: 80,
+        deviceType: "IBM-3278-2",
+        autoScanEnter: false,
+        forceUpperCase: true
+      }
+    ],
+    unsupportedTemplates: {
+      vtSsh: {
+        name: "Newland EB VT SSH Template",
+        protocol: "VT100",
+        transport: "SSH",
+        host,
+        port: 22,
+        rows: 24,
+        cols: 80,
+        sshUser: "operator",
+        credentialAlias: "demo-ssh",
+        knownHostsContent: "paste production known_hosts here"
+      },
+      tn5250Tls: {
+        name: "Newland EB TN5250 TLS Template",
+        protocol: "TN5250",
+        transport: "TLS",
+        host,
+        port: 992,
+        codepage: "CP037",
+        rows: 24,
+        cols: 80,
+        deviceType: "IBM-3477-FC"
+      }
+    },
+    legacyAliases: {
+      webProfile: { name: "Newland EB Web Demo", url: webUrl },
+      vtProfile: {
       name: "Newland EB VT Demo",
       protocol: "VT100",
       transport: "PLAIN_TCP",
@@ -52,6 +151,7 @@ function configSamples(hostHeader) {
       rows: 24,
       cols: 80,
       autoScanEnter: true
+      }
     }
   };
 }
@@ -77,6 +177,7 @@ function html() {
     <button data-action="inbound">Inbound</button>
     <button data-action="inventory">Inventory</button>
     <button data-action="zoom">Small Screen</button>
+    <button data-action="profiles">Profiles</button>
   </nav>
   <script src="/assets/app.js"></script>
 </body>
@@ -88,7 +189,7 @@ function css() {
 }
 
 function clientJs() {
-  return `const app=document.getElementById('app');let state={user:'',task:'',loc:'',item:'',pallet:''};function q(s){return document.querySelector(s)}function focusFirst(){setTimeout(()=>{const el=document.querySelector('input:not([readonly])');if(el)el.focus()},50)}function field(id,label,type='text',scan=false){return '<div class="row"><label for="'+id+'">'+label+'</label><input id="'+id+'" '+(scan?'data-scan="true" inputmode="none"':'')+' type="'+type+'" autocomplete="off"></div>'}function page(title,body){app.innerHTML='<section class="panel"><h1 class="title">'+title+'</h1>'+body+'</section>';bindEnter();focusFirst()}function bindEnter(){app.querySelectorAll('input').forEach((el,i,all)=>{el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const next=all[i+1];if(next){next.focus();return}submitCurrent()}})})}function submitCurrent(){const fn=app.dataset.submit;if(fn&&window[fn])window[fn]()}window.login=()=>page('Login',field('user','User')+field('pass','Password','password')+'<div class="actions"><button onclick="submitCurrent()">Sign in</button></div>');window.submitLogin=()=>{state.user=q('#user')?.value||'operator';outbound()};window.outbound=()=>page('Outbound Picking',field('task','Scan Task #','text',true)+'<div class="actions"><button onclick="submitCurrent()">Continue</button></div>');window.submitOutbound=()=>{state.task=q('#task')?.value||'TASK-1001';page('Pick Task '+state.task,field('loc','Scan Location','text',true)+field('item','Scan Item','text',true)+field('qty','Qty Picked','number')+'<div class="actions"><button onclick="submitCurrent()">Confirm</button></div>')};window.submitPick=()=>page('Pick Confirmed','<p class="ok">Task '+state.task+' confirmed.</p><p>Returning to menu style workflows should not require extra navigation after scan confirmation.</p><div class="actions"><button onclick="outbound()">Next Pick</button><button class="secondary" onclick="inventory()">Inventory</button></div>');window.inbound=()=>page('Inbound Putaway',field('pallet','Scan Pallet','text',true)+field('dest','Scan Destination','text',true)+'<div class="actions"><button onclick="submitCurrent()">Confirm</button></div>');window.submitInbound=()=>page('Putaway Complete','<p class="ok">Pallet putaway confirmed.</p><div class="actions"><button onclick="inbound()">Next Pallet</button></div>');window.inventory=()=>page('Inventory Lookup',field('sku','Scan Item / SKU','text',true)+'<div class="actions"><button onclick="submitCurrent()">Lookup</button></div>');window.submitInventory=()=>page('Inventory Result','<p class="mono">Item: '+(q('#sku')?.value||'ITEM-001')+'</p><p>On hand: <b>127</b></p><p>Locations: A-12-03-B, A-15-07-C</p><div class="actions"><button onclick="inventory()">Lookup Another</button></div>');window.zoom=()=>page('Small Server Screen','<div class="tiny"><p>This page intentionally uses small dense text to validate Newland EB zoom and handheld readability behavior.</p><p class="mono">PO 4500098821 | SKU WIDGET-001 | BIN A-12-03-B | QTY 000127 | STATUS READY</p><p class="mono">Use browser zoom or Newland EB controls to enlarge legacy desktop-style screens.</p></div><div class="actions"><button onclick="app.classList.toggle(\\'zoomed\\')">Toggle Page Zoom</button></div>');function submitCurrent(){const title=app.querySelector('.title')?.textContent||'';if(title==='Login')submitLogin();else if(title==='Outbound Picking')submitOutbound();else if(title.startsWith('Pick Task'))submitPick();else if(title==='Inbound Putaway')submitInbound();else if(title==='Inventory Lookup')submitInventory()}document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>window[b.dataset.action]());login();`;
+  return `const app=document.getElementById('app');let state={user:'',task:'',loc:'',item:'',pallet:''};function q(s){return document.querySelector(s)}function focusFirst(){setTimeout(()=>{const el=document.querySelector('input:not([readonly])');if(el)el.focus()},50)}function field(id,label,type='text',scan=false){return '<div class="row"><label for="'+id+'">'+label+'</label><input id="'+id+'" '+(scan?'data-scan="true" inputmode="none"':'')+' type="'+type+'" autocomplete="off"></div>'}function page(title,body){app.innerHTML='<section class="panel"><h1 class="title">'+title+'</h1>'+body+'</section>';bindEnter();focusFirst()}function bindEnter(){app.querySelectorAll('input').forEach((el,i,all)=>{el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const next=all[i+1];if(next){next.focus();return}submitCurrent()}})})}window.login=()=>page('Login',field('user','User')+field('pass','Password','password')+'<div class="actions"><button onclick="submitCurrent()">Sign in</button></div>');window.submitLogin=()=>{state.user=q('#user')?.value||'operator';outbound()};window.outbound=()=>page('Outbound Picking',field('task','Scan Task #','text',true)+'<div class="actions"><button onclick="submitCurrent()">Continue</button></div>');window.submitOutbound=()=>{state.task=q('#task')?.value||'TASK-1001';page('Pick Task '+state.task,field('loc','Scan Location','text',true)+field('item','Scan Item','text',true)+field('qty','Qty Picked','number')+'<div class="actions"><button onclick="submitCurrent()">Confirm</button></div>')};window.submitPick=()=>page('Pick Confirmed','<p class="ok">Task '+state.task+' confirmed.</p><p>Returning to menu style workflows should not require extra navigation after scan confirmation.</p><div class="actions"><button onclick="outbound()">Next Pick</button><button class="secondary" onclick="inventory()">Inventory</button></div>');window.inbound=()=>page('Inbound Putaway',field('pallet','Scan Pallet','text',true)+field('dest','Scan Destination','text',true)+'<div class="actions"><button onclick="submitCurrent()">Confirm</button></div>');window.submitInbound=()=>page('Putaway Complete','<p class="ok">Pallet putaway confirmed.</p><div class="actions"><button onclick="inbound()">Next Pallet</button></div>');window.inventory=()=>page('Inventory Lookup',field('sku','Scan Item / SKU','text',true)+'<div class="actions"><button onclick="submitCurrent()">Lookup</button></div>');window.submitInventory=()=>page('Inventory Result','<p class="mono">Item: '+(q('#sku')?.value||'ITEM-001')+'</p><p>On hand: <b>127</b></p><p>Locations: A-12-03-B, A-15-07-C</p><div class="actions"><button onclick="inventory()">Lookup Another</button></div>');window.zoom=()=>page('Small Server Screen','<div class="tiny"><p>This page intentionally uses small dense text to validate Newland EB zoom and handheld readability behavior.</p><p class="mono">PO 4500098821 | SKU WIDGET-001 | BIN A-12-03-B | QTY 000127 | STATUS READY</p><p class="mono">Use browser zoom or Newland EB controls to enlarge legacy desktop-style screens.</p></div><div class="actions"><button onclick="app.classList.toggle(\\'zoomed\\')">Toggle Page Zoom</button></div>');window.profiles=async()=>{const res=await fetch('/host-profiles.json');const body=await res.json();page('Host Profile Samples','<p>Use these profiles to validate Web, VT100/VT220, TN5250 and TN3270 entry points.</p><pre class="mono tiny">'+JSON.stringify(body,null,2).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+'</pre>')};function submitCurrent(){const title=app.querySelector('.title')?.textContent||'';if(title==='Login')submitLogin();else if(title==='Outbound Picking')submitOutbound();else if(title.startsWith('Pick Task'))submitPick();else if(title==='Inbound Putaway')submitInbound();else if(title==='Inventory Lookup')submitInventory()}document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>window[b.dataset.action]());login();`;
 }
 
 class VtSession {
@@ -234,6 +335,256 @@ class VtSession {
   }
 }
 
+class Tn5250DemoSession {
+  constructor(socket) {
+    this.socket = socket;
+    this.step = 0;
+    this.buffer = Buffer.alloc(0);
+  }
+
+  start() {
+    this.socket.on("data", (chunk) => this.onData(chunk));
+    this.socket.on("error", () => {});
+    this.showLogin();
+  }
+
+  onData(chunk) {
+    this.buffer = Buffer.concat([this.buffer, Buffer.from(chunk)]);
+    if (this.buffer.length < 1) return;
+    this.buffer = Buffer.alloc(0);
+    this.step += 1;
+    if (this.step === 1) return this.showMenu();
+    if (this.step === 2) return this.showOutbound();
+    if (this.step === 3) return this.showConfirm();
+    this.showMenu();
+  }
+
+  send(record) {
+    this.socket.write(record);
+  }
+
+  showLogin() {
+    this.send(tn5250Screen([
+      at5250(2, 23, "NEWLAND EB TN5250 DEMO"),
+      at5250(5, 8, "USER:"),
+      field5250(5, 16, 16),
+      cursor5250(5, 16),
+      at5250(7, 8, "PASSWORD:"),
+      field5250(7, 16, 16),
+      at5250(11, 8, "ANY INPUT + ENTER CONTINUES"),
+    ]));
+  }
+
+  showMenu() {
+    this.send(tn5250Screen([
+      at5250(2, 24, "AS/400 STYLE MENU"),
+      at5250(5, 8, "1. OUTBOUND PICKING"),
+      at5250(6, 8, "2. INBOUND PUTAWAY"),
+      at5250(7, 8, "3. INVENTORY LOOKUP"),
+      at5250(10, 8, "CHOICE:"),
+      field5250(10, 18, 2),
+      cursor5250(10, 18),
+    ]));
+  }
+
+  showOutbound() {
+    this.send(tn5250Screen([
+      at5250(2, 25, "OUTBOUND PICKING"),
+      at5250(5, 8, "SCAN TASK:"),
+      field5250(5, 21, 18),
+      cursor5250(5, 21),
+      at5250(7, 8, "SCAN LOCATION:"),
+      field5250(7, 24, 18),
+      at5250(9, 8, "CONFIRM QTY:"),
+      field5250(9, 22, 5),
+    ]));
+  }
+
+  showConfirm() {
+    this.send(tn5250Screen([
+      at5250(2, 25, "PICK CONFIRMED"),
+      at5250(6, 8, "TRANSACTION ACCEPTED"),
+      at5250(8, 8, "PRESS ENTER FOR NEXT MENU"),
+      cursor5250(8, 34),
+    ]));
+  }
+}
+
+class Tn3270DemoSession {
+  constructor(socket) {
+    this.socket = socket;
+    this.step = 0;
+    this.buffer = Buffer.alloc(0);
+  }
+
+  start() {
+    this.socket.on("data", (chunk) => this.onData(chunk));
+    this.socket.on("error", () => {});
+    this.showLogin();
+  }
+
+  onData(chunk) {
+    this.buffer = Buffer.concat([this.buffer, Buffer.from(chunk)]);
+    if (this.buffer.length < 1) return;
+    this.buffer = Buffer.alloc(0);
+    this.step += 1;
+    if (this.step === 1) return this.showMenu();
+    if (this.step === 2) return this.showLookup();
+    if (this.step === 3) return this.showResult();
+    this.showMenu();
+  }
+
+  send(record) {
+    this.socket.write(record);
+  }
+
+  showLogin() {
+    this.send(tn3270Screen([
+      at3270(2, 23, "NEWLAND EB TN3270 DEMO"),
+      at3270(5, 8, "USER:"),
+      field3270(5, 16),
+      cursor3270(5, 16),
+      at3270(7, 8, "PASSWORD:"),
+      field3270(7, 18),
+      at3270(11, 8, "ANY INPUT + ENTER CONTINUES"),
+    ]));
+  }
+
+  showMenu() {
+    this.send(tn3270Screen([
+      at3270(2, 24, "MAINFRAME STYLE MENU"),
+      at3270(5, 8, "1. ORDER LOOKUP"),
+      at3270(6, 8, "2. INVENTORY"),
+      at3270(9, 8, "CHOICE:"),
+      field3270(9, 18),
+      cursor3270(9, 18),
+    ]));
+  }
+
+  showLookup() {
+    this.send(tn3270Screen([
+      at3270(2, 27, "ORDER LOOKUP"),
+      at3270(5, 8, "SCAN ORDER:"),
+      field3270(5, 22),
+      cursor3270(5, 22),
+      at3270(7, 8, "SCAN ITEM:"),
+      field3270(7, 21),
+    ]));
+  }
+
+  showResult() {
+    this.send(tn3270Screen([
+      at3270(2, 27, "LOOKUP RESULT"),
+      at3270(5, 8, "ORDER STATUS: READY"),
+      at3270(7, 8, "NEXT ACTION: PICK AND CONFIRM"),
+      at3270(10, 8, "PRESS ENTER FOR MENU"),
+      cursor3270(10, 30),
+    ]));
+  }
+}
+
+function tn5250Screen(parts) {
+  return Buffer.concat([
+    Buffer.from([0x04, 0xF1, 0x00, 0x00]),
+    ...parts,
+  ]);
+}
+
+function at5250(row, col, text) {
+  return Buffer.concat([
+    Buffer.from([0x10, row, col]),
+    ebcdic(text),
+  ]);
+}
+
+function field5250(row, col, length) {
+  return Buffer.concat([
+    Buffer.from([0x10, row, col, 0x1D, 0x00, 0x00, 0x20]),
+    ebcdic(" ".repeat(length)),
+  ]);
+}
+
+function cursor5250(row, col) {
+  return Buffer.from([0x11, row, col]);
+}
+
+function tn3270Screen(parts) {
+  return Buffer.concat([
+    Buffer.from([0xF5, 0x04]),
+    ...parts,
+  ]);
+}
+
+function at3270(row, col, text) {
+  return Buffer.concat([
+    Buffer.from([0x11, ...addr3270(row, col)]),
+    ebcdic(text),
+  ]);
+}
+
+function field3270(row, col) {
+  return Buffer.concat([
+    Buffer.from([0x11, ...addr3270(row, col), 0x1D, 0x40]),
+  ]);
+}
+
+function cursor3270(row, col) {
+  return Buffer.from([0x11, ...addr3270(row, col), 0x13]);
+}
+
+function addr3270(row, col) {
+  const address = (row - 1) * 80 + (col - 1);
+  const table = [
+    0x40, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7,
+    0xC8, 0xC9, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F,
+    0x50, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7,
+    0xD8, 0xD9, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F,
+    0x60, 0x61, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7,
+    0xE8, 0xE9, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F,
+    0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7,
+    0xF8, 0xF9, 0x7A, 0x7B, 0x7C, 0x7D, 0x7E, 0x7F,
+  ];
+  return [table[(address >> 6) & 0x3F], table[address & 0x3F]];
+}
+
+function ebcdic(text) {
+  const bytes = [];
+  for (const raw of text.toUpperCase()) {
+    const code = raw.charCodeAt(0);
+    if (raw >= "A" && raw <= "I") bytes.push(0xC1 + code - 65);
+    else if (raw >= "J" && raw <= "R") bytes.push(0xD1 + code - 74);
+    else if (raw >= "S" && raw <= "Z") bytes.push(0xE2 + code - 83);
+    else if (raw >= "0" && raw <= "9") bytes.push(0xF0 + code - 48);
+    else if (raw === " ") bytes.push(0x40);
+    else if (raw === ".") bytes.push(0x4B);
+    else if (raw === "<") bytes.push(0x4C);
+    else if (raw === "(") bytes.push(0x4D);
+    else if (raw === "+") bytes.push(0x4E);
+    else if (raw === "|") bytes.push(0x4F);
+    else if (raw === "&") bytes.push(0x50);
+    else if (raw === "!") bytes.push(0x5A);
+    else if (raw === "$") bytes.push(0x5B);
+    else if (raw === "*") bytes.push(0x5C);
+    else if (raw === ")") bytes.push(0x5D);
+    else if (raw === ";") bytes.push(0x5E);
+    else if (raw === "-") bytes.push(0x60);
+    else if (raw === "/") bytes.push(0x61);
+    else if (raw === ",") bytes.push(0x6B);
+    else if (raw === "%") bytes.push(0x6C);
+    else if (raw === "_") bytes.push(0x6D);
+    else if (raw === ">") bytes.push(0x6E);
+    else if (raw === "?") bytes.push(0x6F);
+    else if (raw === ":") bytes.push(0x7A);
+    else if (raw === "#") bytes.push(0x7B);
+    else if (raw === "@") bytes.push(0x7C);
+    else if (raw === "'") bytes.push(0x7D);
+    else if (raw === "=") bytes.push(0x7E);
+    else if (raw === "\"") bytes.push(0x7F);
+    else bytes.push(0x40);
+  }
+  return Buffer.from(bytes);
+}
+
 function stripTelnet(input) {
   let out = "";
   for (let i = 0; i < input.length; i++) {
@@ -258,5 +609,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   });
   createVtServer().listen(VT_PORT, HOST, () => {
     console.log(`VT demo listening on ${HOST}:${VT_PORT}`);
+  });
+  createTn5250Server().listen(TN5250_PORT, HOST, () => {
+    console.log(`TN5250 demo listening on ${HOST}:${TN5250_PORT}`);
+  });
+  createTn3270Server().listen(TN3270_PORT, HOST, () => {
+    console.log(`TN3270 demo listening on ${HOST}:${TN3270_PORT}`);
   });
 }

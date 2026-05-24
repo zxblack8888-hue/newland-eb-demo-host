@@ -1,0 +1,60 @@
+{
+  "nlebProfileImport": true,
+  "allowedDomains": [
+    "192.168.0.100"
+  ],
+  "webProfiles": [
+    {
+      "name": "Newland EB Web Demo Local",
+      "url": "http://192.168.0.100:18080",
+      "keyboardMode": "NEWLAND"
+    }
+  ],
+  "teProfiles": [
+    {
+      "name": "Newland EB VT100/VT220 Local",
+      "protocol": "VT100",
+      "transport": "PLAIN_TCP",
+      "host": "192.168.0.100",
+      "port": 2323,
+      "rows": 24,
+      "cols": 80,
+      "autoScanEnter": true
+    },
+    {
+      "name": "Newland EB TN5250 Local",
+      "protocol": "TN5250",
+      "transport": "PLAIN_TCP",
+      "host": "192.168.0.100",
+      "port": 25250,
+      "codepage": "CP037",
+      "rows": 24,
+      "cols": 80,
+      "deviceType": "IBM-3477-FC",
+      "autoScanEnter": false,
+      "forceUpperCase": true,
+      "fieldExitOnFull": true
+    },
+    {
+      "name": "Newland EB TN3270 Local",
+      "protocol": "TN3270",
+      "transport": "PLAIN_TCP",
+      "host": "192.168.0.100",
+      "port": 23270,
+      "codepage": "CP037",
+      "rows": 24,
+      "cols": 80,
+      "deviceType": "IBM-3278-2",
+      "autoScanEnter": false,
+      "forceUpperCase": true
+    }
+  ],
+  "notes": {
+    "localHost": "192.168.0.100",
+    "unsupportedInNodeDemo": [
+      "VT100/VT220 SSH requires a real SSH daemon and known_hosts",
+      "TN5250 TLS requires certificate-backed raw TLS TCP exposure"
+    ],
+    "generatedFor": "MT93 local demo host validation"
+  }
+}
