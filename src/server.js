@@ -7,6 +7,10 @@ const VT_PORT = Number(process.env.VT_PORT || 2323);
 const TN5250_PORT = Number(process.env.TN5250_PORT || 25250);
 const TN3270_PORT = Number(process.env.TN3270_PORT || 23270);
 const HOST = process.env.HOST || "0.0.0.0";
+const RAW_TCP_ENABLED = parseBool(
+  process.env.ENABLE_RAW_TCP,
+  !process.env.RAILWAY_PROJECT_ID && !process.env.RAILWAY_ENVIRONMENT_ID
+);
 
 export function createHttpServer() {
   return http.createServer((req, res) => {
@@ -68,7 +72,53 @@ function hostProfiles(hostHeader) {
   const webUrl = host.includes("localhost") || /^\d+\.\d+\.\d+\.\d+$/.test(host)
     ? `http://${host}:${HTTP_PORT}`
     : `https://${host}`;
+  const teProfiles = RAW_TCP_ENABLED ? [
+    {
+      name: "Newland EB VT100/VT220 Demo",
+      protocol: "VT100",
+      transport: "PLAIN_TCP",
+      host,
+      port: VT_PORT,
+      rows: 24,
+      cols: 80,
+      autoScanEnter: true
+    },
+    {
+      name: "Newland EB TN5250 Demo",
+      protocol: "TN5250",
+      transport: "PLAIN_TCP",
+      host,
+      port: TN5250_PORT,
+      codepage: "CP037",
+      rows: 24,
+      cols: 80,
+      deviceType: "IBM-3477-FC",
+      autoScanEnter: false,
+      forceUpperCase: true,
+      fieldExitOnFull: true
+    },
+    {
+      name: "Newland EB TN3270 Demo",
+      protocol: "TN3270",
+      transport: "PLAIN_TCP",
+      host,
+      port: TN3270_PORT,
+      codepage: "CP037",
+      rows: 24,
+      cols: 80,
+      deviceType: "IBM-3278-2",
+      autoScanEnter: false,
+      forceUpperCase: true
+    }
+  ] : [];
   return {
+    capabilities: {
+      web: true,
+      rawTcp: RAW_TCP_ENABLED,
+      note: RAW_TCP_ENABLED
+        ? "Web, VT100/VT220, TN5250, and TN3270 demo listeners are enabled."
+        : "This deployment exposes Web only. Use Oracle/VPS/local host for raw TCP terminal demos."
+    },
     webProfiles: [
       {
         name: "Newland EB Web Demo",
@@ -76,45 +126,7 @@ function hostProfiles(hostHeader) {
         keyboardMode: "NEWLAND"
       }
     ],
-    teProfiles: [
-      {
-        name: "Newland EB VT100/VT220 Demo",
-        protocol: "VT100",
-        transport: "PLAIN_TCP",
-        host,
-        port: VT_PORT,
-        rows: 24,
-        cols: 80,
-        autoScanEnter: true
-      },
-      {
-        name: "Newland EB TN5250 Demo",
-        protocol: "TN5250",
-        transport: "PLAIN_TCP",
-        host,
-        port: TN5250_PORT,
-        codepage: "CP037",
-        rows: 24,
-        cols: 80,
-        deviceType: "IBM-3477-FC",
-        autoScanEnter: false,
-        forceUpperCase: true,
-        fieldExitOnFull: true
-      },
-      {
-        name: "Newland EB TN3270 Demo",
-        protocol: "TN3270",
-        transport: "PLAIN_TCP",
-        host,
-        port: TN3270_PORT,
-        codepage: "CP037",
-        rows: 24,
-        cols: 80,
-        deviceType: "IBM-3278-2",
-        autoScanEnter: false,
-        forceUpperCase: true
-      }
-    ],
+    teProfiles,
     unsupportedTemplates: {
       vtSsh: {
         name: "Newland EB VT SSH Template",
@@ -603,17 +615,26 @@ function center(text, width) {
   return " ".repeat(pad) + text;
 }
 
+function parseBool(value, fallback) {
+  if (value == null || value === "") return fallback;
+  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   createHttpServer().listen(HTTP_PORT, HOST, () => {
     console.log(`HTTP demo listening on ${HOST}:${HTTP_PORT}`);
   });
-  createVtServer().listen(VT_PORT, HOST, () => {
-    console.log(`VT demo listening on ${HOST}:${VT_PORT}`);
-  });
-  createTn5250Server().listen(TN5250_PORT, HOST, () => {
-    console.log(`TN5250 demo listening on ${HOST}:${TN5250_PORT}`);
-  });
-  createTn3270Server().listen(TN3270_PORT, HOST, () => {
-    console.log(`TN3270 demo listening on ${HOST}:${TN3270_PORT}`);
-  });
+  if (RAW_TCP_ENABLED) {
+    createVtServer().listen(VT_PORT, HOST, () => {
+      console.log(`VT demo listening on ${HOST}:${VT_PORT}`);
+    });
+    createTn5250Server().listen(TN5250_PORT, HOST, () => {
+      console.log(`TN5250 demo listening on ${HOST}:${TN5250_PORT}`);
+    });
+    createTn3270Server().listen(TN3270_PORT, HOST, () => {
+      console.log(`TN3270 demo listening on ${HOST}:${TN3270_PORT}`);
+    });
+  } else {
+    console.log("Raw TCP terminal demos disabled for this deployment.");
+  }
 }
