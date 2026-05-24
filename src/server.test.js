@@ -27,6 +27,30 @@ test("host profile endpoint returns web and terminal profiles", async () => {
   await close(server);
 });
 
+test("web demo navigation is not fixed over form fields", async () => {
+  const server = createHttpServer();
+  await listen(server, 0);
+  const { port } = server.address();
+  const res = await fetch(`http://127.0.0.1:${port}/assets/style.css`);
+  assert.equal(res.status, 200);
+  const css = await res.text();
+  assert.match(css, /nav\{display:flex/);
+  assert.doesNotMatch(css, /nav\{position:fixed/);
+  await close(server);
+});
+
+test("web demo login includes separate user and password fields", async () => {
+  const server = createHttpServer();
+  await listen(server, 0);
+  const { port } = server.address();
+  const res = await fetch(`http://127.0.0.1:${port}/assets/app.js`);
+  assert.equal(res.status, 200);
+  const js = await res.text();
+  assert.match(js, /field\('user','User'\)\+field\('pass','Password','password'\)/);
+  assert.match(js, /window\.zoom=\(\)=>page\('Small Server Screen'/);
+  await close(server);
+});
+
 test("vt login reaches main menu", async () => {
   const server = createVtServer();
   await listen(server, 0);
