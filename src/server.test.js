@@ -51,6 +51,26 @@ test("web demo login includes separate user and password fields", async () => {
   await close(server);
 });
 
+test("small screen zoom button has visible text enlargement styles", async () => {
+  const server = createHttpServer();
+  await listen(server, 0);
+  try {
+    const { port } = server.address();
+    const cssRes = await fetch(`http://127.0.0.1:${port}/assets/style.css`);
+    const jsRes = await fetch(`http://127.0.0.1:${port}/assets/app.js`);
+    assert.equal(cssRes.status, 200);
+    assert.equal(jsRes.status, 200);
+    const css = await cssRes.text();
+    const js = await jsRes.text();
+    assert.match(css, /\.zoomed \.tiny\{font-size:22px/);
+    assert.match(css, /\.zoomed \.mono\{font-size:20px/);
+    assert.match(js, /classList\.toggle/);
+    assert.match(js, /zoomed/);
+  } finally {
+    await close(server);
+  }
+});
+
 test("vt login reaches main menu", async () => {
   const server = createVtServer();
   await listen(server, 0);
