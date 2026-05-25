@@ -64,9 +64,11 @@ test("web demo includes JS Bridge print test page", async () => {
     const js = await jsRes.text();
     assert.match(html, /data-action="printTest"/);
     assert.match(js, /window\.printTest/);
-    assert.match(js, /Android\.printZpl\(/);
-    assert.match(js, /Android\.printZplTo\(/);
-    assert.match(js, /\^XA/);
+    assert.match(js, /Android\.printRaw\(/);
+    assert.match(js, /Android\.printRawTo\(/);
+    assert.match(js, /CPCL label/);
+    assert.match(js, /ESC\/POS receipt/);
+    assert.match(js, /Bluetooth SPP/);
   } finally {
     await close(server);
   }
