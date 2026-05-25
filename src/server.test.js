@@ -51,6 +51,27 @@ test("web demo login includes separate user and password fields", async () => {
   await close(server);
 });
 
+test("web demo includes JS Bridge print test page", async () => {
+  const server = createHttpServer();
+  await listen(server, 0);
+  try {
+    const { port } = server.address();
+    const htmlRes = await fetch(`http://127.0.0.1:${port}/`);
+    const jsRes = await fetch(`http://127.0.0.1:${port}/assets/app.js`);
+    assert.equal(htmlRes.status, 200);
+    assert.equal(jsRes.status, 200);
+    const html = await htmlRes.text();
+    const js = await jsRes.text();
+    assert.match(html, /data-action="printTest"/);
+    assert.match(js, /window\.printTest/);
+    assert.match(js, /Android\.printZpl\(/);
+    assert.match(js, /Android\.printZplTo\(/);
+    assert.match(js, /\^XA/);
+  } finally {
+    await close(server);
+  }
+});
+
 test("small screen zoom button has visible text enlargement styles", async () => {
   const server = createHttpServer();
   await listen(server, 0);
