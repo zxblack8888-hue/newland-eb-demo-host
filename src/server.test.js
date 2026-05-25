@@ -69,6 +69,9 @@ test("web demo includes JS Bridge print test page", async () => {
     assert.match(js, /CPCL label/);
     assert.match(js, /ESC\/POS receipt/);
     assert.match(js, /Bluetooth SPP/);
+    assert.match(js, /Android\.startBluetoothPrinterScan/);
+    assert.match(js, /window\.onBluetoothPrinterScan/);
+    assert.match(js, /Scan Printers/);
   } finally {
     await close(server);
   }
