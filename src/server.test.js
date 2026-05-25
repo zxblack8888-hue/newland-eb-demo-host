@@ -74,6 +74,11 @@ test("web demo includes JS Bridge print test page", async () => {
     assert.match(js, /Bluetooth Printer Setup/);
     assert.match(js, /connectSelectedBluetoothPrinter/);
     assert.match(js, /Scan Printer/);
+    assert.match(js, /Scan Nearby/);
+    assert.match(js, /Nearby scan results/);
+    const css = await (await fetch(`http://127.0.0.1:${port}/assets/style.css`)).text();
+    assert.match(css, /\.scanning \.scan-dot/);
+    assert.match(css, /@keyframes sweep/);
   } finally {
     await close(server);
   }
