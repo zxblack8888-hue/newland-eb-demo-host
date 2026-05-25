@@ -76,8 +76,12 @@ test("web demo includes JS Bridge print test page", async () => {
     assert.match(js, /Scan Printer/);
     assert.match(js, /Scan Nearby/);
     assert.match(js, /Nearby scan results/);
+    assert.match(js, /modal-actions/);
     const css = await (await fetch(`http://127.0.0.1:${port}/assets/style.css`)).text();
     assert.match(css, /\.scanning \.scan-dot/);
+    assert.match(css, /\.modal-card\{[^}]*display:flex/);
+    assert.match(css, /\.device-list\{[^}]*overflow:auto/);
+    assert.match(css, /\.modal-actions\{[^}]*flex:0 0 auto/);
     assert.match(css, /@keyframes sweep/);
   } finally {
     await close(server);
